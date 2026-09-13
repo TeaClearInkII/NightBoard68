@@ -264,6 +264,29 @@ class HidKeyboard(
         scheduleReconnect()   // 连上了会被 cancelReconnect 清掉；没连上继续下一轮
     }
 
+    /**
+     * 按键唤醒回连：平板类 host（iPad / 安卓平板）普遍采用「按需重连」省电策略——
+     * 闲置一段时间后主动断开 ACL 链路，等键盘下次按键时由键盘侧重新 connect。
+     * 断连自动回连的轮次（约 70s）远覆盖不了这类闲置断链，真正的键盘都实现了
+     * 按键唤醒；这里在断连状态下收到输入时补一次立即回连（5s 节流）。
+     */
+    fun wakeConnect() {
+        if (host != null) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastWakeAt < WAKE_CONNECT_THROTTLE_MS) return
+        lastWakeAt = now
+        if (!prefs.getBoolean("auto_reconnect", true)) return
+        val a = adapter
+        if (a == null || !a.isEnabled) {
+            logConn("按键唤醒跳过：蓝牙未开启")
+            return
+        }
+        logConn("收到输入，按键唤醒回连…")
+        connectBondedHost()
+    }
+
+    private var lastWakeAt = 0L
+
     // ---------- 连接事件日志（设置页可见，诊断蓝牙断连规律） ----------
 
     private val connLog = ArrayDeque<String>()
@@ -457,5 +480,6 @@ class HidKeyboard(
         private const val CONN_LOG_LINES = 30
         private val RECONNECT_DELAYS_MS = longArrayOf(3000L, 8000L, 20000L, 40000L)
         private const val MOUSE_COALESCE_MS = 10L
+        private const val WAKE_CONNECT_THROTTLE_MS = 5000L
     }
 }
