@@ -41,9 +41,15 @@ class HidKeyboard(
     private val main = Handler(Looper.getMainLooper())
     private val prefs = appContext.getSharedPreferences("nightboard", Context.MODE_PRIVATE)
 
-    /** 电脑端大写锁定状态（由 LED output report 回传） */
+    /** 电脑端 LED 状态（由 LED output report 回传；主机权威，未收到不猜测） */
     @Volatile
     var capsOn = false
+        private set
+    @Volatile
+    var numOn = false
+        private set
+    @Volatile
+    var ledKnown = false
         private set
 
     val adapter: BluetoothAdapter?
@@ -135,11 +141,16 @@ class HidKeyboard(
         }
 
         override fun onSetReport(device: BluetoothDevice, type: Byte, reportId: Byte, data: ByteArray) {
-            // LED output report：bit0 NumLock、bit1 CapsLock、bit2 ScrollLock
+            // LED output report：bit0 NumLock、bit1 CapsLock、bit2 ScrollLock（主机权威）
             if (type == BluetoothHidDevice.REPORT_TYPE_OUTPUT && data.isNotEmpty()) {
-                val caps = (data[0].toInt() and 0x02) != 0
-                if (caps != capsOn) {
+                val mask = data[0].toInt()
+                val caps = (mask and 0x02) != 0
+                val num = (mask and 0x01) != 0
+                val wasKnown = ledKnown
+                ledKnown = true
+                if (caps != capsOn || num != numOn || !wasKnown) {
                     capsOn = caps
+                    numOn = num
                     main.post { listener.onLedsChanged() }
                 }
             }
@@ -204,6 +215,29 @@ class HidKeyboard(
         hidDevice?.connect(device) ?: false
     } catch (_: Exception) {
         false
+    }
+
+    /**
+     * 切换连接目标：已连接其他电脑时先断开，再让自动回连去连新目标。
+     * （HID profile 同时只维持一台主机，不断开旧主机直接 connect 新设备会被系统忽略）
+     */
+    fun switchHost(device: BluetoothDevice): Boolean {
+        val current = host
+        if (current == null || current.address == device.address) return connectHost(device)
+        val d = hidDevice ?: return false
+        logConn("断开当前连接，切换目标：${safeName(device) ?: device.address}")
+        cancelReconnect()   // 重置回连计数，断开回调会重新排程
+        try {
+            d.disconnect(current)
+        } catch (_: SecurityException) {
+            return false
+        }
+        // 先把回连目标指向新电脑：断开回调触发的自动回连会直接去连新目标
+        try {
+            prefs.edit().putString("last_host_mac", device.address).apply()
+        } catch (_: SecurityException) {
+        }
+        return true
     }
 
     /** 注册成功后自动回连上次连接过的电脑（设置里可关） */
