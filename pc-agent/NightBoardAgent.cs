@@ -379,6 +379,25 @@ class NightBoardAgent
         m[0x50] = new KeyDef(0x4B, true, 0);    // Left
         m[0x51] = new KeyDef(0x50, true, 0);    // Down
         m[0x52] = new KeyDef(0x48, true, 0);    // Up
+        // 数字小键盘 (HID 0x53..0x63)：Set1 扫描码与主键盘数字键区共用，
+        // 实际输出方向/数字由电脑端 NumLock 决定（蓝牙 HID 同样如此）
+        m[0x53] = new KeyDef(0x45, false, 0);   // NumLk
+        m[0x54] = new KeyDef(0x35, false, 0);   // 小键盘 /
+        m[0x55] = new KeyDef(0x37, false, 0);   // 小键盘 *
+        m[0x56] = new KeyDef(0x4A, false, 0);   // 小键盘 -
+        m[0x57] = new KeyDef(0x4E, false, 0);   // 小键盘 +
+        m[0x58] = new KeyDef(0x1C, true, 0);    // 小键盘 Enter
+        m[0x59] = new KeyDef(0x47, false, 0);   // 7
+        m[0x5A] = new KeyDef(0x48, false, 0);   // 8
+        m[0x5B] = new KeyDef(0x49, false, 0);   // 9
+        m[0x5C] = new KeyDef(0x4B, false, 0);   // 4
+        m[0x5D] = new KeyDef(0x4C, false, 0);   // 5
+        m[0x5E] = new KeyDef(0x4D, false, 0);   // 6
+        m[0x5F] = new KeyDef(0x4F, false, 0);   // 1
+        m[0x60] = new KeyDef(0x50, false, 0);   // 2
+        m[0x61] = new KeyDef(0x51, false, 0);   // 3
+        m[0x62] = new KeyDef(0x52, false, 0);   // 0
+        m[0x63] = new KeyDef(0x53, false, 0);   // .
         // 修饰键 (HID 0xE0..0xE7)
         m[0xE0] = new KeyDef(0x1D, false, 0);   // LCtrl
         m[0xE1] = new KeyDef(0x2A, false, 0);   // LShift

@@ -132,6 +132,13 @@ class HidKeyboard(
                 } catch (_: SecurityException) {
                 }
                 main.post { listener.onHostChanged(safeName(device)) }
+                // 重连建立后与电脑端重新同步键盘状态，防止上次 keyUp/发送失败未送达导致卡键连发：
+                // 手机端已无按键 → 补发空报告解除电脑端卡键；手指仍按着 → 补发真实状态对齐
+                synchronized(lock) {
+                    if (dirty || heldMods != 0 || oneShotMods != 0 || keys.any { it != 0 }) {
+                        sync()
+                    }
+                }
             } else if (host == device) {
                 host = null
                 logConn("电脑断开连接：${safeName(device) ?: "未知设备"}")
@@ -366,6 +373,8 @@ class HidKeyboard(
     private var heldMods = 0      // 物理按住的修饰键（Win 键等）
     private var oneShotMods = 0   // 点按锁存的修饰键（一次性）
     private val keys = IntArray(6)
+    /** 报告状态与电脑端可能不一致（发送失败/连接未就绪），需在连接恢复后补发 */
+    private var dirty = false
 
     fun modDown(bit: Int) = synchronized(lock) {
         heldMods = heldMods or bit
@@ -423,15 +432,24 @@ class HidKeyboard(
     }
 
     private fun sync() {
-        val h = host ?: return
-        val d = hidDevice ?: return
+        val h = host ?: run {
+            // 连接未就绪：记 dirty，连接恢复时补发，避免电脑端收不到抬起而卡键连发
+            dirty = true
+            return
+        }
+        val d = hidDevice ?: run {
+            dirty = true
+            return
+        }
         report[0] = (heldMods or oneShotMods).toByte()
         report[1] = 0
         for (i in 0 until 6) report[2 + i] = keys[i].toByte()
         try {
             d.sendReport(h, REPORT_ID_KEYBOARD, report)
+            dirty = false
         } catch (e: Exception) {
             Log.w(TAG, "sendReport 失败", e)
+            dirty = true
         }
     }
 
