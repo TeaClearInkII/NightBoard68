@@ -127,6 +127,9 @@ class HidKeyboard(
                 host = device
                 cancelReconnect()
                 logConn("电脑已连接：${safeName(device) ?: "未知设备"}")
+                // 重连即推送一次当前报告状态（通常为全抬起）：清掉断链窗口里
+                // 电脑端残留的按下键——keydown 送达、keyup 丢失的经典连击来源
+                synchronized(lock) { sync() }
                 try {
                     prefs.edit().putString("last_host_mac", device.address).apply()
                 } catch (_: SecurityException) {
@@ -430,8 +433,29 @@ class HidKeyboard(
         for (i in 0 until 6) report[2 + i] = keys[i].toByte()
         try {
             d.sendReport(h, REPORT_ID_KEYBOARD, report)
+            reportRetry = 0
         } catch (e: Exception) {
+            // 发送失败（链路抖动/重连窗口）：若 keydown 已送达而这次是 keyup，
+            // 电脑端会残留按下态一直连击——按当前真实状态有界重发直至链路收下
             Log.w(TAG, "sendReport 失败", e)
+            scheduleReportRetry()
+        }
+    }
+
+    /** 报告发送失败后的状态重发（递增间隔，成功即停；连接恢复时也会重推一次） */
+    private var reportRetry = 0
+    private val reportRetryRun = Runnable { resyncReport() }
+
+    private fun scheduleReportRetry() {
+        if (reportRetry >= REPORT_RETRY_MAX) return
+        reportRetry++
+        main.removeCallbacks(reportRetryRun)
+        main.postDelayed(reportRetryRun, 80L * reportRetry)
+    }
+
+    private fun resyncReport() {
+        synchronized(lock) {
+            if (host != null && hidDevice != null) sync()
         }
     }
 
@@ -515,5 +539,6 @@ class HidKeyboard(
         private val RECONNECT_DELAYS_MS = longArrayOf(3000L, 8000L, 20000L, 40000L)
         private const val MOUSE_COALESCE_MS = 10L
         private const val WAKE_CONNECT_THROTTLE_MS = 5000L
+        private const val REPORT_RETRY_MAX = 8
     }
 }

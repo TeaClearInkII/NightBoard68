@@ -132,6 +132,9 @@ class NightBoardAgent
         // 新连接的边沿检测基线归零：上一台手机异常断线时若按钮为按下态，
         // 不复位会导致新连接的第一条 b:1 被判"无变化"，表现为重连后轻点失灵
         prevButtons = 0;
+        // 新连接先清一次按键残留：旧连接若为半开（手机后台断网未触发断开清理），
+        // 断链窗口里按下的键仍在 pressed 里被连发，用户感知为回来后一直连击
+        ReleaseAllKeys();
         SendToPhone("{\"t\":\"led\",\"c\":" + LedMask() + "}");
 
         var buffer = new StringBuilder();
@@ -204,6 +207,7 @@ class NightBoardAgent
                 break;
             case "p":
                 SendToPhone("{\"t\":\"po\",\"i\":" + GetInt(json, "i") + "}");
+                PostLed();   // 心跳兜底回传 LED：主机 NumLock 在别处被切换时手机端标注仍能跟上
                 break;
         }
     }
@@ -297,7 +301,7 @@ class NightBoardAgent
 
     static void StartRepeat(int hid)
     {
-        if (hid >= 0xE0 && hid <= 0xE7) return;   // 修饰键不需要连发
+        if ((hid >= 0xE0 && hid <= 0xE7) || hid == 0x53) return;   // 修饰键 / NumLock 不需要连发
         lock (repeatLock)
         {
             if (!repeatTimers.ContainsKey(hid))
@@ -388,6 +392,26 @@ class NightBoardAgent
         m[0xE5] = new KeyDef(0x36, false, 0);   // RShift
         m[0xE6] = new KeyDef(0x38, true, 0);    // RAlt (AltGr)
         m[0xE7] = new KeyDef(0x5C, true, 0);    // RWin
+        // 数字小键盘 (HID Keypad 页 0x53..0x63)：非扩展扫描码与实体小键盘一致，
+        // Windows 按主机 NumLock 状态自行翻译（开=数字，关=方向键/编辑键），
+        // 与手机端小键盘面板的「8→↑」标注语义完全对应
+        m[0x53] = new KeyDef(0, true, 0x90);    // NumLock（VK_NUMLOCK，需扩展位）
+        m[0x54] = new KeyDef(0x35, true, 0);    // ÷
+        m[0x55] = new KeyDef(0x37, false, 0);   // ×
+        m[0x56] = new KeyDef(0x4A, false, 0);   // −
+        m[0x57] = new KeyDef(0x4E, false, 0);   // +
+        m[0x58] = new KeyDef(0x1C, true, 0);    // 小键盘 Enter
+        m[0x59] = new KeyDef(0x4F, false, 0);   // 1
+        m[0x5A] = new KeyDef(0x50, false, 0);   // 2
+        m[0x5B] = new KeyDef(0x51, false, 0);   // 3
+        m[0x5C] = new KeyDef(0x4B, false, 0);   // 4
+        m[0x5D] = new KeyDef(0x4C, false, 0);   // 5
+        m[0x5E] = new KeyDef(0x4D, false, 0);   // 6
+        m[0x5F] = new KeyDef(0x47, false, 0);   // 7
+        m[0x60] = new KeyDef(0x48, false, 0);   // 8
+        m[0x61] = new KeyDef(0x49, false, 0);   // 9
+        m[0x62] = new KeyDef(0x52, false, 0);   // 0
+        m[0x63] = new KeyDef(0x53, false, 0);   // .
         return m;
     }
 
@@ -398,7 +422,7 @@ class NightBoardAgent
         lock (keyLock) pressed.Add(hid);
         SendKey(d, false);
         StartRepeat(hid);
-        if (hid == 0x39) PostLed();   // CapsLock 状态可能翻转
+        if (hid == 0x39 || hid == 0x53) PostLed();   // Caps/NumLock 状态可能翻转
         if (verbose) Log("kd " + hid.ToString("X2"));
     }
 
@@ -409,7 +433,7 @@ class NightBoardAgent
         StopRepeat(hid);
         lock (keyLock) pressed.Remove(hid);
         SendKey(d, true);
-        if (hid == 0x39) PostLed();
+        if (hid == 0x39 || hid == 0x53) PostLed();
         if (verbose) Log("ku " + hid.ToString("X2"));
     }
 
