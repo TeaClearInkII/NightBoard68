@@ -52,8 +52,12 @@ class LanKeyboard(
     /** 最近一次心跳往返延迟（毫秒），未测得为 -1 */
     @Volatile var rttMs = -1
         private set
-    /** 电脑端回传的大写锁定状态 */
+    /** 电脑端回传的 LED 状态（主机权威：led 消息回传；未收到 ledKnown=false 不猜测） */
     @Volatile var capsOn = false
+        private set
+    @Volatile var numOn = false
+        private set
+    @Volatile var ledKnown = false
         private set
 
     @Volatile private var running = false
@@ -311,8 +315,12 @@ class LanKeyboard(
                 "led" -> {
                     val mask = o.optInt("c", 0)
                     val caps = (mask and 0x02) != 0
-                    if (caps != capsOn) {
+                    val num = (mask and 0x01) != 0
+                    val wasKnown = ledKnown
+                    ledKnown = true
+                    if (caps != capsOn || num != numOn || !wasKnown) {
                         capsOn = caps
+                        numOn = num
                         notifyUi()
                     }
                 }
@@ -381,6 +389,10 @@ class LanKeyboard(
     fun keyUp(code: Int): Boolean = isConnected && sendLine(JSONObject().put("t", "ku").put("c", code).toString())
 
     fun releaseAll(): Boolean = isConnected && sendLine(JSONObject().put("t", "ra").toString())
+
+    /** 文本注入：逐字发送任意 Unicode 文本（含中文），Agent 端用 SendInput UNICODE 打出 */
+    fun sendText(text: String): Boolean =
+        isConnected && text.isNotEmpty() && sendLine(JSONObject().put("t", "txt").put("s", text).toString())
 
     /** buttons: bit0 左键 bit1 右键；dx/dy/wheel 相对量 */
     fun sendMouse(dx: Int, dy: Int, wheel: Int, buttons: Int): Boolean =

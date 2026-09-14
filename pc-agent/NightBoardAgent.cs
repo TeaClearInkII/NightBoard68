@@ -7,7 +7,8 @@
 //   3. 通过 Win32 SendInput 注入成真实键鼠输入（等同于硬件键盘）
 //
 // 协议（手机→电脑）：{"t":"hello","n":"机型"} {"t":"kd","c":HID键码}
-//   {"t":"ku","c":HID键码} {"t":"m","dx":..,"dy":..,"w":..,"b":..} {"t":"ra"} {"t":"p","i":id}
+//   {"t":"ku","c":HID键码} {"t":"m","dx":..,"dy":..,"w":..,"b":..} {"t":"ra"}
+//   {"t":"txt","s":"任意Unicode文本(中文等)"} {"t":"p","i":id}
 // 协议（电脑→手机）：{"t":"po","i":id} {"t":"led","c":键盘灯位掩码} {"t":"disc","n":计算机名,"p":6868}
 //
 // 首次运行如 Windows 防火墙弹出提示，请勾选"专用网络"并允许，否则手机搜不到。
@@ -198,10 +199,79 @@ class NightBoardAgent
             case "ra":
                 ReleaseAllKeys();
                 break;
+            case "txt":
+                TypeText(UnescapeJson(GetStr(json, "s") ?? ""), verbose);
+                break;
             case "p":
                 SendToPhone("{\"t\":\"po\",\"i\":" + GetInt(json, "i") + "}");
                 break;
         }
+    }
+
+    // ---------- 文本注入（手机软键盘逐字发送，支持中文等任意 Unicode） ----------
+
+    /// 通过 SendInput KEYEVENTF_UNICODE 逐字输入。UTF-16 代理对（如 emoji）
+    /// 按两个码元连发，Windows 会自行拼合。
+    static void TypeText(string s, bool verbose)
+    {
+        if (string.IsNullOrEmpty(s)) return;
+        var list = new List<INPUT>(s.Length * 2);
+        foreach (char c in s)
+        {
+            var down = new INPUT();
+            down.type = 1; // INPUT_KEYBOARD
+            down.U.ki.wScan = c;
+            down.U.ki.dwFlags = KEYEVENTF_UNICODE;
+            list.Add(down);
+            var up = new INPUT();
+            up.type = 1;
+            up.U.ki.wScan = c;
+            up.U.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+            list.Add(up);
+        }
+        SendInputs(list.ToArray());
+        if (verbose) Log("txt " + s);
+    }
+
+    /// 手机端 JSON 字符串是转义过的（\" \\ \n 等），按标准规则反转义
+    static string UnescapeJson(string s)
+    {
+        var sb = new StringBuilder(s.Length);
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (c == '\\' && i + 1 < s.Length)
+            {
+                char n = s[++i];
+                switch (n)
+                {
+                    case '"': sb.Append('"'); break;
+                    case '\\': sb.Append('\\'); break;
+                    case '/': sb.Append('/'); break;
+                    case 'n': sb.Append('\n'); break;
+                    case 'r': sb.Append('\r'); break;
+                    case 't': sb.Append('\t'); break;
+                    case 'u':
+                        if (i + 4 < s.Length)
+                        {
+                            string hex = s.Substring(i + 1, 4);
+                            int code;
+                            if (int.TryParse(hex, System.Globalization.NumberStyles.HexNumber,
+                                System.Globalization.CultureInfo.InvariantCulture, out code))
+                            {
+                                sb.Append((char)code);
+                                i += 4;
+                                break;
+                            }
+                        }
+                        sb.Append('u');
+                        break;
+                    default: sb.Append(n); break;
+                }
+            }
+            else sb.Append(c);
+        }
+        return sb.ToString();
     }
 
     // ---------- 键盘注入 ----------
@@ -511,6 +581,7 @@ class NightBoardAgent
     const uint KEYEVENTF_EXTENDEDKEY = 0x1000;
     const uint KEYEVENTF_KEYUP = 0x0002;
     const uint KEYEVENTF_SCANCODE = 0x0008;
+    const uint KEYEVENTF_UNICODE = 0x0004;
     const uint MOUSEEVENTF_MOVE = 0x0001;
     const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     const uint MOUSEEVENTF_LEFTUP = 0x0004;
