@@ -246,9 +246,6 @@ class LanKeyboard(
             rttMs = -1
             setState(State.CONNECTED)
             sendLine(JSONObject().put("t", "hello").put("v", 1).put("n", deviceName()).toString())
-            // 连接建立即清一次电脑端按键残留：后台断网回来若旧连接是半开（未触发
-            // 断开清理），断链窗口里按下的键在电脑端仍处按下态 = 一直连击
-            sendLine(JSONObject().put("t", "ra").toString())
             startWriter()
             startHeartbeat()
             readLoop(sock)
