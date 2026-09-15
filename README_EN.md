@@ -15,8 +15,24 @@ HID device — **zero software to install on the PC**.
   </tr>
 </table>
 
-> **Current version: v1.3.2** (based on upstream v1.2.1, version numbering aligned
-> with this repository). What's new in v1.3.2 (vs v1.3.1):
+> **Current version: v1.4.0** (based on upstream v1.2.1, version numbering aligned
+> with this repository). What's new in v1.4.0 (vs v1.3.2), by community contributor
+> [@TeaClearInkII](https://github.com/TeaClearInkII) (PR #10):
+>
+> - **Numpad** — a real 4×5 keypad with Keypad-page HID codes, resizable floating
+>   layout, and NumLock-off hints driven by host LED state.
+> - **Soft keyboard** — type Chinese/any Unicode straight into the PC over LAN
+>   (new `txt` protocol in NightBoardAgent, Unicode injection); composition text
+>   is filtered; entry hidden in Bluetooth mode.
+> - **Touchpad** — hold a mouse-key column button and move to drag/select;
+>   resizable floating touchpad; fixed two-finger move event loss.
+> - **Combos & dialogs** — multi-primary-key custom combos with dedup, unified
+>   dark rounded PanelDialog framework, bottom-sheet style pickers.
+> - Plus: host-authoritative LED states, switchHost for paired-device switching,
+>   Mac key labels (⌃⌥⌘), portrait immersion/keep-screen-on, first-run
+>   long-press onboarding. **Update `NightBoardAgent.exe` together with the APK.**
+>
+> What's new in v1.3.2 (vs v1.3.1):
 >
 > - **Modifier/combo fixes** — hold Alt and tap Tab repeatedly to cycle through
 >   all background windows (held modifiers now persist across keystrokes and

@@ -85,7 +85,14 @@ class InputHub(
     }
 
     private fun send(event: (Channel) -> Boolean): Boolean {
-        val target = active() ?: return false
+        val target = active()
+        if (target == null) {
+            // 蓝牙模式下断连时收到输入 = 用户在打字：触发按键唤醒回连。
+            // 平板类 host 惯用「按需重连」——闲置后主动断链，等键盘下次按键再连；
+            // 不实现唤醒的话，搁置一会儿就彻底掉线，必须手动重连。
+            if (mode == MODE_BT) hid.wakeConnect()
+            return false
+        }
         return try {
             event(target)
         } catch (_: Exception) {
